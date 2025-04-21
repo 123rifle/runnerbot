@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Endless Runner Game</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { overflow: hidden; background: skyblue; font-family: sans-serif; }
+
+    #game {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      background: url('images/sky.gif') no-repeat center center;
+      background-size: cover;
+      border-bottom: 5px solid #333;
+    }
+
+    #road {
+ position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 100px;
+  background: url('images/road.png') repeat-x;
+  background-size: auto 100px; /* Keep image crisp and scale by height only */
+  z-index: 1;
+    }
+
+    #player {
+      position: absolute;
+      bottom: 100px;
+      left: 50px;
+      width: 100px;
+      height: 100px;
+      background: url('images/dog.gif') no-repeat center/contain;
+      background-size: contain;
+      z-index: 2;
+    }
+
+    .obstacle {
+      position: absolute;
+      bottom: 100px;
+      width: 60px;
+      height: 60px;
+      background: url('images/obstacle.png') no-repeat center/contain;
+      background-size: contain;
+      z-index: 2;
+    }
+
+    #score, #highscore {
+      position: absolute;
+      top: 10px;
+      font-size: 24px;
+      color: #333;
+      width: 100%;
+      text-align: center;
+      z-index: 3;
+    }
+
+    #highscore { top: 50px; }
+
+    #startScreen, #pauseScreen, #gameOverScreen {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.6);
+      color: white;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      flex-direction: column;
+      font-size: 32px;
+      z-index: 5;
+    }
+
+    #pauseScreen, #gameOverScreen { display: none; }
+
+    button {
+      margin-top: 20px;
+      padding: 10px 20px;
+      font-size: 20px;
+      cursor: pointer;
+    }
+
+    #jumpBtn {
+      position: absolute;
+      bottom: 50px;
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 15px 25px;
+      font-size: 20px;
+      background: rgba(0, 0, 0, 0.6);
+      color: white;
+      border: none;
+      cursor: pointer;
+      z-index: 4;
+    }
+  </style>
+</head>
+<body>
+  <div id="game">
+    <div id="startScreen">
+      <div>Press Start to Play</div>
+      <button onclick="startGame()">Start</button>
+    </div>
+    <div id="pauseScreen">
+      <div>Paused</div>
+      <button onclick="resumeGame()">Resume</button>
+    </div>
+    <div id="gameOverScreen">
+      <div>Game Over</div>
+      <button onclick="restartGame()">Restart</button>
+    </div>
+
+    <div id="player"></div>
+    <div id="score">Score: 0</div>
+    <div id="highscore">High Score: 0</div>
+    <div id="road"></div>
+    <button id="jumpBtn" onclick="jump()">Jump</button>
+  </div>
+
+  <script>
+    const game = document.getElementById('game');
+    const player = document.getElementById('player');
+    const scoreEl = document.getElementById('score');
+    const highScoreEl = document.getElementById('highscore');
+    const startScreen = document.getElementById('startScreen');
+    const pauseScreen = document.getElementById('pauseScreen');
+    const gameOverScreen = document.getElementById('gameOverScreen');
+    const jumpBtn = document.getElementById('jumpBtn');
+
+    let isJumping = false;
+    let gravity = 1.2;
+    let velocity = 0;
+    let playerY = 0;
+    let gameSpeed = 5;
+    let score = 0;
+    let highScore = localStorage.getItem("highScore") || 0;
+    highScoreEl.textContent = "High Score: " + highScore;
+
+    const groundLevel = 0;
+    const jumpHeight = 20;
+    let obstacleCooldown = 0;
+    const minObstacleDistance = 1000;
+
+    let isPaused = false;
+    let isStarted = false;
+    let obstacles = [];
+
+    function jump() {
+      if (!isJumping) {
+        velocity = jumpHeight;
+        isJumping = true;
+      }
+    }
+
+    document.addEventListener('keydown', (e) => {
+      if (e.code === 'Space') {
+        e.preventDefault();
+        if (!isStarted || isPaused) return;
+        jump();
+      } else if (e.code === 'KeyP') {
+        if (!isStarted) return;
+        togglePause();
+      }
+    });
+
+    function togglePause() {
+      isPaused = !isPaused;
+      pauseScreen.style.display = isPaused ? 'flex' : 'none';
+      if (!isPaused) requestAnimationFrame(gameLoop);
+    }
+
+    function updatePlayer() {
+      velocity -= gravity;
+      playerY += velocity;
+
+      if (playerY < groundLevel) {
+        playerY = groundLevel;
+        velocity = 0;
+        isJumping = false;
+      }
+
+      player.style.bottom = 100 + playerY + 'px';
+    }
+
+    function createObstacle() {
+      const obstacle = document.createElement('div');
+      obstacle.classList.add('obstacle');
+      obstacle.style.left = '100vw';
+      game.appendChild(obstacle);
+
+      let obstacleX = window.innerWidth;
+
+      function moveObstacle() {
+        if (isPaused) return requestAnimationFrame(moveObstacle);
+
+        obstacleX -= gameSpeed;
+        obstacle.style.left = obstacleX + 'px';
+
+        const playerRect = player.getBoundingClientRect();
+        const obsRect = obstacle.getBoundingClientRect();
+
+        if (
+          playerRect.left < obsRect.left + obsRect.width &&
+          playerRect.left + playerRect.width > obsRect.left &&
+          playerRect.bottom > obsRect.top
+        ) {
+          if (score > highScore) {
+            highScore = score;
+            localStorage.setItem("highScore", highScore);
+          }
+          gameOverScreen.style.display = 'flex';
+          scoreEl.textContent = 'Score: ' + score;
+          highScoreEl.textContent = 'High Score: ' + highScore;
+          isPaused = true;
+          return;
+        }
+
+        if (obstacleX + 40 > 0) {
+          requestAnimationFrame(moveObstacle);
+        } else {
+          game.removeChild(obstacle);
+          obstacles = obstacles.filter(o => o !== obstacle);
+        }
+      }
+
+      obstacles.push(obstacle);
+      moveObstacle();
+    }
+
+    function gameLoop() {
+      if (!isStarted || isPaused) return;
+
+      updatePlayer();
+      score++;
+      scoreEl.textContent = 'Score: ' + score;
+
+      if (score % 100 === 0) gameSpeed += 1;
+
+      obstacleCooldown++;
+      if (obstacleCooldown >= minObstacleDistance / gameSpeed) {
+        createObstacle();
+        obstacleCooldown = 0;
+      }
+
+      requestAnimationFrame(gameLoop);
+    }
+
+    function startGame() {
+      startScreen.style.display = 'none';
+      isStarted = true;
+      score = 0;
+      gameSpeed = 5;
+      gameLoop();
+    }
+
+    function resumeGame() {
+      pauseScreen.style.display = 'none';
+      isPaused = false;
+      gameLoop();
+    }
+
+    function restartGame() {
+      gameOverScreen.style.display = 'none';
+      player.style.bottom = '100px';
+      playerY = 0;
+      velocity = 0;
+      isJumping = false;
+      score = 0;
+      scoreEl.textContent = 'Score: ' + score;
+      gameSpeed = 5;
+
+      obstacles.forEach(obstacle => game.removeChild(obstacle));
+      obstacles = [];
+      obstacleCooldown = 0;
+      pauseScreen.style.display = 'none';
+      isPaused = false;
+      isStarted = true;
+      gameLoop();
+    }
+  </script>
+</body>
+</html>
